@@ -1,0 +1,11 @@
+[package]
+name = "html-replacer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.69"
+html_editor = "0.5.2"
+walkdir = "2.3.2"

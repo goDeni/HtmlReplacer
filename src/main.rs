@@ -1,14 +1,12 @@
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 
 use html_editor::{
-    operation::{Editable, Htmlifiable, Queryable, Selector},
+    operation::{Htmlifiable, Selector},
     parse, Element, Node,
 };
 use std::{
-    borrow::BorrowMut,
     fs::{self, File},
     io::Write,
-    ops::{Deref, DerefMut},
 };
 
 use walkdir::WalkDir;
@@ -70,8 +68,6 @@ fn get_header_node() -> Result<Node> {
 }
 
 fn main() -> Result<()> {
-    println!("Hello, world!");
-
     let header_node = get_header_node()?;
 
     for entry in WalkDir::new("../input") {

@@ -1,15 +1,54 @@
 use anyhow::{anyhow, Error, Result};
 
 use html_editor::{
-    operation::{Editable, Htmlifiable, Selector},
+    operation::{Editable, Htmlifiable, Queryable, Selector},
     parse, Element, Node,
 };
 use std::{
+    borrow::BorrowMut,
     fs::{self, File},
     io::Write,
+    ops::{Deref, DerefMut},
 };
 
 use walkdir::WalkDir;
+
+trait ReplaceQuery {
+    fn query_replace(&mut self, selector: &Selector, new_node: &Node);
+}
+
+impl ReplaceQuery for Vec<Node> {
+    fn query_replace(&mut self, selector: &Selector, new_node: &Node) {
+        let new_vec: Vec<Node> = self
+            .iter()
+            .map(|node| {
+                if !node.is_element() {
+                    return node.clone();
+                }
+                let mut element = node.clone().into_element();
+                if selector.matches(&element) {
+                    return new_node.clone();
+                }
+
+                element.query_replace(selector, new_node);
+                return Node::Element {
+                    name: element.name,
+                    attrs: element.attrs,
+                    children: element.children,
+                };
+            })
+            .collect();
+
+        self.clear();
+        self.extend(new_vec);
+    }
+}
+
+impl ReplaceQuery for Element {
+    fn query_replace(&mut self, selector: &Selector, new_node: &Node) {
+        self.children.query_replace(selector, new_node)
+    }
+}
 
 fn get_header_node() -> Result<Node> {
     let node = parse(fs::read_to_string("../header.html")?.as_ref())
@@ -30,19 +69,6 @@ fn get_header_node() -> Result<Node> {
     return Ok(node);
 }
 
-fn find_head_vec(nodes: &Vec<Node>) {
-    let mut elements = Vec::<Element>::from_iter(nodes.iter().filter_map(|node| {
-        if node.is_element() {
-            return Some(node.into_element());
-        }
-        return None;
-    }));
-
-    while elements.len() > 0 {
-        // let element = elements.pop();
-    }
-}
-
 fn main() -> Result<()> {
     println!("Hello, world!");
 
@@ -61,11 +87,10 @@ fn main() -> Result<()> {
         }
 
         let mut dom = parse(fs::read_to_string(path.clone())?.as_ref()).unwrap();
-
-        // let res = dom.insert_to(&Selector::from("head"), header_node.clone()).html();
-
+        dom.query_replace(&Selector::from("head"), &header_node);
         File::create("output.html")?.write_all(dom.html().as_bytes())?;
-        break;
+
+        println!("Done {:?}", path);
     }
 
     Ok(())

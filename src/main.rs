@@ -30,7 +30,7 @@ fn get_header_node() -> Result<Node> {
     return Ok(node);
 }
 
-fn find_head_vec(nodes: & Vec<Node>) {
+fn find_head_vec(nodes: &Vec<Node>) {
     let mut elements = Vec::<Element>::from_iter(nodes.iter().filter_map(|node| {
         if node.is_element() {
             return Some(node.into_element());

@@ -1,12 +1,16 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 
+use clap::Parser;
+use fs_extra::dir::{copy as copy_dir, create_all, CopyOptions};
 use html_editor::{
     operation::{Htmlifiable, Selector},
     parse, Element, Node,
 };
 use std::{
-    fs::{self, File},
+    fs::{self, OpenOptions},
     io::Write,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use walkdir::WalkDir;
@@ -48,8 +52,8 @@ impl ReplaceQuery for Element {
     }
 }
 
-fn get_header_node() -> Result<Node> {
-    let node = parse(fs::read_to_string("../header.html")?.as_ref())
+fn get_header_node(file: &Path) -> Result<Node> {
+    let node = parse(fs::read_to_string(file)?.as_ref())
         .unwrap()
         .get(0)
         .unwrap()
@@ -67,10 +71,53 @@ fn get_header_node() -> Result<Node> {
     return Ok(node);
 }
 
-fn main() -> Result<()> {
-    let header_node = get_header_node()?;
+fn replace_elements(html: String, selector: &str, header_node: Node) -> String {
+    let mut nodes = parse(&html).unwrap();
 
-    for entry in WalkDir::new("../input") {
+    nodes.query_replace(&Selector::from(selector), &header_node);
+
+    nodes.html()
+}
+
+fn backup_directory(directory_to_backup: &Path) -> Result<()> {
+    let directory = Path::new("./backup").join(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)?
+            .as_millis()
+            .to_string(),
+    );
+
+    create_all(directory.clone(), false)?;
+    copy_dir(
+        directory_to_backup,
+        directory.clone(),
+        &CopyOptions::new().content_only(true),
+    )?;
+    println!(
+        "Backup created \"{}\"",
+        directory
+            .canonicalize()
+            .or(Ok(directory))?
+            .to_str()
+            .unwrap()
+    );
+
+    Ok(())
+}
+
+#[derive(Parser)]
+struct Cli {
+    header_file: std::path::PathBuf,
+    html_files_dir: std::path::PathBuf,
+}
+
+fn main() -> Result<()> {
+    let args = Cli::parse();
+
+    let header_node = get_header_node(&args.header_file)?;
+    backup_directory(&args.html_files_dir)?;
+
+    for entry in WalkDir::new(args.html_files_dir) {
         let path = entry?.path().to_owned();
         if path.is_dir() {
             println!("Entering in directory {}", path.display());
@@ -82,9 +129,16 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let mut dom = parse(fs::read_to_string(path.clone())?.as_ref()).unwrap();
-        dom.query_replace(&Selector::from("head"), &header_node);
-        File::create("output.html")?.write_all(dom.html().as_bytes())?;
+        let new_file_content = replace_elements(
+            fs::read_to_string(path.clone())?,
+            "head",
+            header_node.clone(),
+        );
+        OpenOptions::new()
+            .truncate(true)
+            .write(true)
+            .open(path.clone())?
+            .write_all(new_file_content.as_bytes())?;
 
         println!("Done {:?}", path);
     }

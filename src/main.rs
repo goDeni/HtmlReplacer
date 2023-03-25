@@ -72,17 +72,13 @@ fn get_header_node(file: &Path) -> Result<Node> {
     return Ok(node);
 }
 
-fn replace_elements(html_file: &Path, selector: &str, header_node: Node) -> Result<String> {
-    match parse(read_to_string(html_file.clone())?.as_ref()) {
+fn replace_elements(html: String, selector: &str, header_node: Node) -> Result<String> {
+    match parse(&html) {
         StdOk(mut nodes) => {
             nodes.query_replace(&Selector::from(selector), &header_node);
             Ok(nodes.html())
         }
-        Err(err) => Err(anyhow!(
-            "Failed to parse html file \"{}\": {}",
-            html_file.to_str().unwrap(),
-            err
-        )),
+        Err(err) => Err(anyhow!(err)),
     }
 }
 
@@ -131,14 +127,22 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let new_file_content = replace_elements(path.as_path(), "head", header_node.clone())?;
-        OpenOptions::new()
-            .truncate(true)
-            .write(true)
-            .open(path.clone())?
-            .write_all(new_file_content.as_bytes())?;
+        match replace_elements(read_to_string(path.clone())?, "head", header_node.clone()) {
+            StdOk(new_file_content) => {
+                OpenOptions::new()
+                    .truncate(true)
+                    .write(true)
+                    .open(path.clone())?
+                    .write_all(new_file_content.as_bytes())?;
 
-        println!("Done {:?}", path);
+                println!("Done {:?}", path);
+            }
+            Err(err) => println!(
+                "Unable to process file \"{}\": {}",
+                path.to_str().unwrap(),
+                err
+            ),
+        }
     }
 
     Ok(())

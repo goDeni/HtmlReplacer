@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Ok, Result};
+use std::result::Result::Ok as StdOk;
 
 use clap::Parser;
 use fs_extra::dir::{copy as copy_dir, create_all, CopyOptions};
@@ -7,7 +8,7 @@ use html_editor::{
     parse, Element, Node,
 };
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, read_to_string, OpenOptions},
     io::Write,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -71,12 +72,18 @@ fn get_header_node(file: &Path) -> Result<Node> {
     return Ok(node);
 }
 
-fn replace_elements(html: String, selector: &str, header_node: Node) -> String {
-    let mut nodes = parse(&html).unwrap();
-
-    nodes.query_replace(&Selector::from(selector), &header_node);
-
-    nodes.html()
+fn replace_elements(html_file: &Path, selector: &str, header_node: Node) -> Result<String> {
+    match parse(read_to_string(html_file.clone())?.as_ref()) {
+        StdOk(mut nodes) => {
+            nodes.query_replace(&Selector::from(selector), &header_node);
+            Ok(nodes.html())
+        }
+        Err(err) => Err(anyhow!(
+            "Failed to parse html file \"{}\": {}",
+            html_file.to_str().unwrap(),
+            err
+        )),
+    }
 }
 
 fn backup_directory(directory_to_backup: &Path) -> Result<()> {
@@ -124,16 +131,7 @@ fn main() -> Result<()> {
             continue;
         }
 
-        if path.extension().unwrap() != "htm" {
-            println!("File {:?} has no .htm extension", path.file_name().unwrap());
-            continue;
-        }
-
-        let new_file_content = replace_elements(
-            fs::read_to_string(path.clone())?,
-            "head",
-            header_node.clone(),
-        );
+        let new_file_content = replace_elements(path.as_path(), "head", header_node.clone())?;
         OpenOptions::new()
             .truncate(true)
             .write(true)
